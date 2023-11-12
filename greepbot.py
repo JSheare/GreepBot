@@ -76,13 +76,13 @@ class Greepbot(discord.Client):
         # Rolls the dice and initiates the voice channel easter egg
         if message.author.voice:
             likelihood = 0.25
-            if random.random() < likelihood:
+            if random.random() <= likelihood:
                 await self.greep_scream(message)
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
         with open('quotes.txt') as file:
-            quotes = [s for s in file.readlines()]
+            quotes = file.readlines()
 
         while True:
             quote_index = random_selector(quotes)
@@ -131,7 +131,7 @@ class Greepbot(discord.Client):
     # Sends a random Greep-related gif
     async def send_gif(self, message):
         with open('gifs.txt') as file:
-            gifs = [s for s in file.readlines()]
+            gifs = file.readlines()
 
         while True:
             gif_index = random_selector(gifs)
