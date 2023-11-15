@@ -49,35 +49,35 @@ class Greepbot(discord.Client):
         # Sends a random Greep quote from the list
         if message.content == 'greepbot':
             await self.send_quote(message)
+            await self.roll_dice(message)
 
         # Sends the number of days, hours, minutes, and seconds until Sunday
         if message.content == 'greepbot countdown':
             await self.send_countdown(message)
+            await self.roll_dice(message)
 
         # Sends a random Greep-related gif
         if message.content == 'greepbot gif':
             await self.send_gif(message)
+            await self.roll_dice(message)
 
         # IP request (dev use)
         if 'greepbot ip' in message.content:
             await self.send_ip(message)
+            await self.roll_dice(message)
 
         # Allows users to set a preferred channel for the Sunday gif
         if message.content == 'greepbot set gif channel':
             await self.set_pref_gif_channel(message)
+            await self.roll_dice(message)
 
         # Sends BCNR easter egg
         bcnr_list = ['black country, new road', 'bcnr', 'black country new road', 'black country']
         for term in bcnr_list:
             if term in message.content.lower():
                 await self.send_bcnr(message)
+                await self.roll_dice(message)
                 break
-
-        # Rolls the dice and initiates the voice channel easter egg
-        if message.author.voice:
-            likelihood = 0.25
-            if random.random() <= likelihood:
-                await self.greep_scream(message)
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
@@ -182,6 +182,13 @@ class Greepbot(discord.Client):
         await message.channel.send(response)
         now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
         print(f'{now}: BCNR Message', file=self.log)
+
+    # Rolls the dice and initiates the voice channel easter egg
+    async def roll_dice(self, message):
+        if message.author.voice:
+            likelihood = 0.25
+            if random.random() <= likelihood:
+                await self.greep_scream(message)
 
     async def greep_scream(self, message):
         channel = message.author.voice.channel
