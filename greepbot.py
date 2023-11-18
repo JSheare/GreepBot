@@ -45,39 +45,33 @@ class Greepbot(discord.Client):
         # Ignores any messages from the bot itself
         if message.author == self.user:
             return
+        else:
+            # Sends a random Greep quote from the list
+            if message.content == 'greepbot':
+                await self.send_quote(message)
+            # Sends the number of days, hours, minutes, and seconds until Sunday
+            elif message.content == 'greepbot countdown':
+                await self.send_countdown(message)
 
-        # Sends a random Greep quote from the list
-        if message.content == 'greepbot':
-            await self.send_quote(message)
+            # Sends a random Greep-related gif
+            elif message.content == 'greepbot gif':
+                await self.send_gif(message)
+            # IP request (dev use)
+            elif 'greepbot ip' in message.content:
+                await self.send_ip(message)
+            # Allows users to set a preferred channel for the Sunday gif
+            elif message.content == 'greepbot set gif channel':
+                await self.set_pref_gif_channel(message)
+
+            # Sends BCNR easter egg
+            bcnr_list = ['black country, new road', 'bcnr', 'black country new road', 'black country']
+            for term in bcnr_list:
+                if term in message.content.lower():
+                    await self.send_bcnr(message)
+                    break
+
+            # Rolls dice on voice channel easter egg
             await self.roll_dice(message)
-
-        # Sends the number of days, hours, minutes, and seconds until Sunday
-        if message.content == 'greepbot countdown':
-            await self.send_countdown(message)
-            await self.roll_dice(message)
-
-        # Sends a random Greep-related gif
-        if message.content == 'greepbot gif':
-            await self.send_gif(message)
-            await self.roll_dice(message)
-
-        # IP request (dev use)
-        if 'greepbot ip' in message.content:
-            await self.send_ip(message)
-            await self.roll_dice(message)
-
-        # Allows users to set a preferred channel for the Sunday gif
-        if message.content == 'greepbot set gif channel':
-            await self.set_pref_gif_channel(message)
-            await self.roll_dice(message)
-
-        # Sends BCNR easter egg
-        bcnr_list = ['black country, new road', 'bcnr', 'black country new road', 'black country']
-        for term in bcnr_list:
-            if term in message.content.lower():
-                await self.send_bcnr(message)
-                await self.roll_dice(message)
-                break
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
@@ -193,8 +187,8 @@ class Greepbot(discord.Client):
     async def greep_scream(self, message):
         channel = message.author.voice.channel
         vc = await channel.connect()
-        # vc.play(discord.FFmpegPCMAudio('greep_scream.mp3', executable='C:/ffmpeg/bin/ffmpeg.exe'))  # on win
-        vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
+        vc.play(discord.FFmpegPCMAudio('greep_scream.mp3', executable='C:/ffmpeg/bin/ffmpeg.exe'))  # on win
+        # vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
         await asyncio.sleep(2.5)
         await message.guild.voice_client.disconnect()
 
