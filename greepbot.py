@@ -71,7 +71,8 @@ class Greepbot(discord.Client):
                     break
 
             # Rolls dice on voice channel easter egg
-            await self.roll_dice(message)
+            if 'greepbot' in message.content:
+                await self.roll_dice(message)
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
@@ -187,8 +188,8 @@ class Greepbot(discord.Client):
     async def greep_scream(self, message):
         channel = message.author.voice.channel
         vc = await channel.connect()
-        vc.play(discord.FFmpegPCMAudio('greep_scream.mp3', executable='C:/ffmpeg/bin/ffmpeg.exe'))  # on win
-        # vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
+        # vc.play(discord.FFmpegPCMAudio('greep_scream.mp3', executable='C:/ffmpeg/bin/ffmpeg.exe'))  # on win
+        vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
         await asyncio.sleep(2.5)
         await message.guild.voice_client.disconnect()
 
