@@ -71,7 +71,8 @@ class Greepbot(discord.Client):
                     break
 
             # Rolls dice on voice channel easter egg
-            await self.roll_dice(message)
+            if 'greepbot' in message.content:
+                await self.roll_dice(message)
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
