@@ -4,6 +4,7 @@ import asyncio
 import urllib.request
 import socket
 import json
+import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from numpy import random
@@ -23,7 +24,6 @@ class Greepbot(discord.Client):
         self.ip_pass = os.getenv('ip_pass')
         self.quote_num = 0  # Here to prevent repeat quotes being sent by 'greepbot' command
         self.gif_num = 0  # Here to prevent repeat gifs being sent by 'greepbot gif' command
-        self.log = open('log.txt', 'w')
         # Server gif channel preferences
         self.gif_preferences = {}
         try:
@@ -37,8 +37,6 @@ class Greepbot(discord.Client):
     async def on_ready(self):
         print(f'{self.user} has connected to Discord')
         print(f'Severs: {", ".join([guild.name + f" (id: {guild.id})" for guild in self.guilds])}')
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-        print(f'{now}: Bot initialization', file=self.log)
 
     # Bot message commands
     async def on_message(self, message):
@@ -87,9 +85,6 @@ class Greepbot(discord.Client):
 
         await message.channel.send(quotes[quote_index])
 
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-        print(f'{now}: Greeting Message', file=self.log)
-
     # Sends the number of days, hours, minutes, and seconds until Sunday
     # This could probably be optimized
     async def send_countdown(self, message):
@@ -121,8 +116,6 @@ class Greepbot(discord.Client):
 
             await message.channel.send(response)
 
-        print(f'{now}: Countdown Message', file=self.log)
-
     # Sends a random Greep-related gif
     async def send_gif(self, message):
         with open('gifs.txt') as file:
@@ -136,12 +129,8 @@ class Greepbot(discord.Client):
 
         await message.channel.send(gifs[gif_index])
 
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-        print(f'{now}: Gif Message', file=self.log)
-
     # IP request (dev use)
     async def send_ip(self, message):
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
         if message.content == f'greepbot ip {self.ip_pass}':
             public_ip = urllib.request.urlopen('https://v4.ident.me').read().decode('utf-8')
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -159,24 +148,18 @@ class Greepbot(discord.Client):
         else:
             await message.channel.send('Incorrect Password')
 
-        print(f'{now}: IP Request', file=self.log)
-
     # Allows users to set a preferred channel for the Sunday gif
     async def set_pref_gif_channel(self, message):
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
         self.gif_preferences.update({message.guild.id: message.channel.id})
         with open('gif_preferences.json', 'w') as outfile:
             json.dump(self.gif_preferences, outfile)
 
         await message.channel.send(f'Schlagenheim gif will be sent in "{message.channel}" for "{message.guild}"')
-        print(f'{now}: Gif posting channel change (guild {message.guild.id})', file=self.log)
 
     # Sends BCNR easter egg
     async def send_bcnr(self, message):
         response = 'https://cdn.discordapp.com/attachments/360236282267303966/1026729585804582962/unknown.png'
         await message.channel.send(response)
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-        print(f'{now}: BCNR Message', file=self.log)
 
     # Rolls the dice and initiates the voice channel easter egg
     async def roll_dice(self, message):
@@ -192,9 +175,6 @@ class Greepbot(discord.Client):
         vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
         await asyncio.sleep(2.5)
         await message.guild.voice_client.disconnect()
-
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-        print(f'{now}: Greep scream', file=self.log)
 
     # Sends the Sunday gif
     async def sunday(self):
@@ -212,8 +192,6 @@ class Greepbot(discord.Client):
         for channel in channels:
             sunday_gif = 'https://tenor.com/view/schlagenheim-black-midi-greep-geordie-greep-bmbmbm-gif-22879771'
             await channel.send(sunday_gif)
-            now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
-            print(f'{now}: Sunday gif posted', file=self.log)
 
     # Checks the day of the week and runs sunday() if it is Sunday
     async def check_dow_background(self):
@@ -226,13 +204,11 @@ class Greepbot(discord.Client):
                     if day_seconds + random_seconds >= 86400:
                         continue
                     else:
-                        print(f'{now}: {random_seconds} seconds until gif is posted', file=self.log)
                         await asyncio.sleep(random_seconds)
                         await self.sunday()
                         await asyncio.sleep(86400)
                         break
             else:
-                print(f'{now}: Day check', file=self.log)
                 await asyncio.sleep(3600)
 
     # Custom status background task
@@ -257,5 +233,6 @@ class Greepbot(discord.Client):
 
 intents = discord.Intents.default()
 intents.message_content = True
+log_handler = logging.FileHandler(filename='log.txt', encoding='utf-8', mode='w')
 greep = Greepbot(intents=intents)
-greep.run(greep.discord_token)
+greep.run(greep.discord_token, log_handler=log_handler, log_level=logging.INFO)
