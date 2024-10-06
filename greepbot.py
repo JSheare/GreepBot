@@ -87,7 +87,8 @@ class Greepbot(discord.Client):
 
     # Sends the number of days, hours, minutes, and seconds until Sunday
     # This could probably be optimized
-    async def send_countdown(self, message):
+    @staticmethod
+    async def send_countdown(message):
         now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
         full_days_until = 5 - now.weekday()
         if full_days_until == -1:
@@ -138,7 +139,9 @@ class Greepbot(discord.Client):
             try:
                 s.connect(('10.254.254.254', 1))
                 local_ip = s.getsockname()[0]
-            except Exception:
+            except Exception as e:
+                logger = logging.getLogger('discord')
+                logger.error(e)
                 local_ip = '127.0.0.1'
             finally:
                 s.close()
@@ -157,7 +160,8 @@ class Greepbot(discord.Client):
         await message.channel.send(f'Schlagenheim gif will be sent in "{message.channel}" for "{message.guild}"')
 
     # Sends BCNR easter egg
-    async def send_bcnr(self, message):
+    @staticmethod
+    async def send_bcnr(message):
         response = 'https://cdn.discordapp.com/attachments/360236282267303966/1026729585804582962/unknown.png'
         await message.channel.send(response)
 
@@ -168,10 +172,10 @@ class Greepbot(discord.Client):
             if random.random() <= likelihood:
                 await self.greep_scream(message)
 
-    async def greep_scream(self, message):
+    @staticmethod
+    async def greep_scream(message):
         channel = message.author.voice.channel
         vc = await channel.connect()
-        # vc.play(discord.FFmpegPCMAudio('greep_scream.mp3', executable='C:/ffmpeg/bin/ffmpeg.exe'))  # on win
         vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
         await asyncio.sleep(2.5)
         await message.guild.voice_client.disconnect()
@@ -231,8 +235,13 @@ class Greepbot(discord.Client):
         self.loop.create_task(self.custom_status_background())
 
 
-intents = discord.Intents.default()
-intents.message_content = True
-log_handler = logging.FileHandler(filename='log.txt', encoding='utf-8', mode='w')
-greep = Greepbot(intents=intents)
-greep.run(greep.discord_token, log_handler=log_handler, log_level=logging.INFO)
+def main():
+    intents = discord.Intents.default()
+    intents.message_content = True
+    log_handler = logging.FileHandler(filename='log.txt', encoding='utf-8', mode='w')
+    greep = Greepbot(intents=intents)
+    greep.run(greep.discord_token, log_handler=log_handler, log_level=logging.INFO)
+
+
+if __name__ == '__main__':
+    main()
