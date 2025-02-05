@@ -1,11 +1,12 @@
-import os
-import discord
 import asyncio
-import urllib.request
-import socket
+import discord
 import json
 import logging
+import os
+import socket
+import urllib.request
 from datetime import datetime, timezone
+from discord.ext import tasks
 from dotenv import load_dotenv
 from numpy import random
 
@@ -22,21 +23,28 @@ class Greepbot(discord.Client):
         load_dotenv()  # Loads the .env file where the tokens are stored
         self.discord_token = os.getenv('DISCORD_TOKEN')
         self.ip_pass = os.getenv('ip_pass')
+
         self.quote_num = 0  # Here to prevent repeat quotes being sent by 'greepbot' command
+        self.quote_lock = asyncio.Lock()
+
         self.gif_num = 0  # Here to prevent repeat gifs being sent by 'greepbot gif' command
+        self.gif_lock = asyncio.Lock()
+
+        self.sunday_cooldown = asyncio.Event()
+
         # Server gif channel preferences
-        self.gif_preferences = {}
         try:
             with open('gif_preferences.json', 'r') as openfile:
                 self.gif_preferences = json.load(openfile)
 
         except FileNotFoundError:
-            pass
+            self.gif_preferences = {}
 
     # Discord client startup tasks
     async def on_ready(self):
-        print(f'{self.user} has connected to Discord')
-        print(f'Severs: {", ".join([guild.name + f" (id: {guild.id})" for guild in self.guilds])}')
+        print('Severs:')
+        for guild in self.guilds:
+            print(f'{guild.name} (id: {guild.id})')
 
     # Bot message commands
     async def on_message(self, message):
@@ -74,19 +82,19 @@ class Greepbot(discord.Client):
 
     # Sends a random Greep quote from the list
     async def send_quote(self, message):
-        with open('quotes.txt') as file:
-            quotes = file.readlines()
+        async with self.quote_lock:
+            with open('quotes.txt') as file:
+                quotes = file.readlines()
 
-        while True:
-            quote_index = random_selector(quotes)
-            if quote_index != self.quote_num:
-                self.quote_num = quote_index
-                break
+            while True:
+                quote_index = random_selector(quotes)
+                if quote_index != self.quote_num:
+                    self.quote_num = quote_index
+                    break
 
-        await message.channel.send(quotes[quote_index])
+            await message.channel.send(quotes[quote_index])
 
     # Sends the number of days, hours, minutes, and seconds until Sunday
-    # This could probably be optimized
     @staticmethod
     async def send_countdown(message):
         now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
@@ -119,16 +127,17 @@ class Greepbot(discord.Client):
 
     # Sends a random Greep-related gif
     async def send_gif(self, message):
-        with open('gifs.txt') as file:
-            gifs = file.readlines()
+        async with self.gif_lock:
+            with open('gifs.txt') as file:
+                gifs = file.readlines()
 
-        while True:
-            gif_index = random_selector(gifs)
-            if gif_index != self.gif_num:
-                self.gif_num = gif_index
-                break
+            while True:
+                gif_index = random_selector(gifs)
+                if gif_index != self.gif_num:
+                    self.gif_num = gif_index
+                    break
 
-        await message.channel.send(gifs[gif_index])
+            await message.channel.send(gifs[gif_index])
 
     # IP request (dev use)
     async def send_ip(self, message):
@@ -139,9 +148,8 @@ class Greepbot(discord.Client):
             try:
                 s.connect(('10.254.254.254', 1))
                 local_ip = s.getsockname()[0]
-            except Exception as e:
-                logger = logging.getLogger('discord')
-                logger.error(e)
+            except Exception as ex:
+                logging.getLogger('discord').error(ex)
                 local_ip = '127.0.0.1'
             finally:
                 s.close()
@@ -153,7 +161,7 @@ class Greepbot(discord.Client):
 
     # Allows users to set a preferred channel for the Sunday gif
     async def set_pref_gif_channel(self, message):
-        self.gif_preferences.update({message.guild.id: message.channel.id})
+        self.gif_preferences[message.guild.id] = message.channel.id
         with open('gif_preferences.json', 'w') as outfile:
             json.dump(self.gif_preferences, outfile)
 
@@ -167,21 +175,20 @@ class Greepbot(discord.Client):
 
     # Rolls the dice and initiates the voice channel easter egg
     async def roll_dice(self, message):
-        if message.author.voice:
-            likelihood = 0.25
-            if random.random() <= likelihood:
-                await self.greep_scream(message)
+        likelihood = 0.25
+        if random.random() <= likelihood:
+            await self.greep_scream(message)
 
     @staticmethod
     async def greep_scream(message):
-        channel = message.author.voice.channel
-        vc = await channel.connect()
-        vc.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
-        await asyncio.sleep(2.5)
-        await message.guild.voice_client.disconnect()
+        if message.author.voice:
+            voice_client = await message.author.voice.channel.connect()
+            voice_client.play(discord.FFmpegPCMAudio('greep_scream.mp3'))
+            await asyncio.sleep(2.5)
+            await voice_client.disconnect()
 
     # Sends the Sunday gif
-    async def sunday(self):
+    async def send_sunday_gif(self):
         await self.wait_until_ready()
         channels = []
         for server in self.guilds:
@@ -198,41 +205,41 @@ class Greepbot(discord.Client):
             await channel.send(sunday_gif)
 
     # Checks the day of the week and runs sunday() if it is Sunday
+    @tasks.loop(hours=1)
     async def check_dow_background(self):
-        while True:
+        await self.wait_until_ready()
+        if not self.sunday_cooldown.is_set():
             now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
             if now.weekday() == 6:
                 day_seconds = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).seconds
+                self.sunday_cooldown.set()  # To prevent the gif from being sent multiple times a day
                 while True:
                     random_seconds = random.randint(0, high=86400)
-                    if day_seconds + random_seconds >= 86400:
-                        continue
-                    else:
-                        await asyncio.sleep(random_seconds)
-                        await self.sunday()
-                        await asyncio.sleep(86400)
+                    if day_seconds + random_seconds < 86400:
                         break
-            else:
-                await asyncio.sleep(3600)
+
+                await asyncio.sleep(random_seconds)
+                await self.send_sunday_gif()
+                await asyncio.sleep(86400)
+                self.sunday_cooldown.clear()
 
     # Custom status background task
+    @tasks.loop()
     async def custom_status_background(self):
-        songs = {'Hellfire': 84, 'Sugar/Tzu': 230, 'Eat Men Eat': 188, 'Welcome To Hell': 249, 'Still': 646,
-                 'Half Time': 26, 'The Race Is About To Begin': 435, 'Dangerous Liaisons': 254, 'The Defence': 179,
-                 '27 Questions': 343, 'John L': 313, 'Marlene Dietrich': 173, 'Chondromalacia Patella': 289,
-                 'Slow': 337, 'Diamond Stuff': 380, 'Dethroned': 302, 'Hogwash and Balderdash': 152,
-                 'Ascending Forth': 593, '953': 320, 'Speedway': 197, 'Reggae': 209, 'Near DT, MI': 140,
-                 'Western': 488, 'Of Schlagenhgeim': 384, 'bmbmbm': 296, 'Years Ago': 154, 'Ducter': 402}
-        songlist = list(songs.keys())
-        while True:
-            song_index = random_selector(songlist)
-            await self.wait_until_ready()
-            await self.change_presence(activity=discord.Game(songlist[song_index]))
-            await asyncio.sleep(songs[songlist[song_index]])
+        await self.wait_until_ready()
+        with open('songs.json', 'r') as file:
+            songs = json.load(file)
+
+        song_list = list(songs.keys())
+        song_index = random_selector(song_list)
+        await self.wait_until_ready()
+        await self.change_presence(activity=discord.Activity(name=song_list[song_index],
+                                                             type=discord.ActivityType.listening))
+        await asyncio.sleep(songs[song_list[song_index]])
 
     async def setup_hook(self):
-        self.loop.create_task(self.check_dow_background())
-        self.loop.create_task(self.custom_status_background())
+        self.check_dow_background.start()
+        self.custom_status_background.start()
 
 
 def main():

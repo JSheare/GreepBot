@@ -1,2 +1,0 @@
-figure out how to make the bot start with system start
-fix channel choice bug
