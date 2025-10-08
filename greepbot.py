@@ -5,7 +5,7 @@ import logging
 import os
 import socket
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 from discord.ext import tasks
 from dotenv import load_dotenv
 from numpy import random
@@ -23,6 +23,7 @@ class Greepbot(discord.Client):
         load_dotenv()  # Loads the .env file where the tokens are stored
         self.discord_token = os.getenv('DISCORD_TOKEN')
         self.ip_pass = os.getenv('ip_pass')
+        self.privileged_user = int(os.getenv('privileged_user'))
 
         self.quote_num = 0  # Here to prevent repeat quotes being sent by 'greepbot' command
         self.quote_lock = asyncio.Lock()
@@ -97,7 +98,7 @@ class Greepbot(discord.Client):
     # Sends the number of days, hours, minutes, and seconds until Sunday
     @staticmethod
     async def send_countdown(message):
-        now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
+        now = datetime.now()
         full_days_until = 5 - now.weekday()
         if full_days_until == -1:
             await message.channel.send('It is currently Schlagenheim Sunday')
@@ -141,7 +142,7 @@ class Greepbot(discord.Client):
 
     # IP request (dev use)
     async def send_ip(self, message):
-        if message.content == f'greepbot ip {self.ip_pass}':
+        if message.author.id == self.privileged_user or message.content == f'greepbot ip {self.ip_pass}':
             public_ip = urllib.request.urlopen('https://v4.ident.me').read().decode('utf-8')
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(0)
@@ -209,7 +210,7 @@ class Greepbot(discord.Client):
     async def check_dow_background(self):
         await self.wait_until_ready()
         if not self.sunday_cooldown.is_set():
-            now = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone(tz=None)
+            now = datetime.now()
             if now.weekday() == 6:
                 day_seconds = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).seconds
                 self.sunday_cooldown.set()  # To prevent the gif from being sent multiple times a day
@@ -240,6 +241,12 @@ class Greepbot(discord.Client):
     async def setup_hook(self):
         self.check_dow_background.start()
         self.custom_status_background.start()
+
+    # Removing player when we are removed from a guild
+    async def on_guild_remove(self, guild):
+        del self.gif_preferences[guild.id]
+        with open('gif_preferences.json', 'w') as outfile:
+            json.dump(self.gif_preferences, outfile)
 
 
 def main():
