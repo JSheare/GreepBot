@@ -37,7 +37,7 @@ class GreepBot(discord.Client):
         self._gif_preferences = self._read_gif_preferences()
 
     @staticmethod
-    def _read_gif_preferences() -> Dict[int, int]:
+    def _read_gif_preferences() -> Dict[str, int]:
         """Reads Guild channel gif preferences from a file."""
         try:
             gif_preferences = read_json(f'{params.DATA_LOC}/gif_preferences.json')
@@ -164,7 +164,7 @@ class GreepBot(discord.Client):
 
     async def set_pref_gif_channel(self, message: discord.Message) -> None:
         """Sets the preferred channel for the Sunday gif."""
-        self._gif_preferences[message.guild.id] = message.channel.id
+        self._gif_preferences[str(message.guild.id)] = message.channel.id
         await asyncio.to_thread(self._write_gif_preferences)
         await message.channel.send(f'Schlagenheim gif will be sent in "{message.channel}" for "{message.guild}"')
 
@@ -194,7 +194,7 @@ class GreepBot(discord.Client):
         channels = []
         for server in self.guilds:
             try:
-                channels.append(self.get_channel(self._gif_preferences[server.id]))
+                channels.append(self.get_channel(self._gif_preferences[str(server.id)]))
             except KeyError:
                 for channel in server.channels:
                     if str(channel.type) == 'text':
@@ -240,5 +240,5 @@ class GreepBot(discord.Client):
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         """Removing a gif preference when we are removed from a Guild."""
-        del self._gif_preferences[guild.id]
+        del self._gif_preferences[str(guild.id)]
         await asyncio.to_thread(self._write_gif_preferences)
