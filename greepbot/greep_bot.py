@@ -102,7 +102,7 @@ class GreepBot(discord.Client):
     @staticmethod
     async def send_countdown(message: discord.Message) -> None:
         """Sends the number of days, hours, minutes, and seconds until Sunday."""
-        now = datetime.datetime.now(datetime.UTC)
+        now = datetime.datetime.now()
         full_days_until = 5 - now.weekday()
         if full_days_until == -1:
             await message.channel.send('It is currently Schlagenheim Sunday')
@@ -171,7 +171,7 @@ class GreepBot(discord.Client):
     @staticmethod
     async def send_bcnr(message: discord.Message) -> None:
         """Sends BCNR easter egg."""
-        await message.channel.send(content=data_locs.BCNR_PNG)
+        await message.channel.send(file=discord.File(data_locs.BCNR_PNG))
 
     async def roll_dice(self, message):
         """Rolls the dice and initiates the voice channel Easter egg."""
@@ -202,14 +202,14 @@ class GreepBot(discord.Client):
                         break
 
         for channel in channels:
-            await channel.send(content=data_locs.SUNDAY_GIF)
+            await channel.send(file=discord.File(data_locs.SUNDAY_GIF))
 
     @tasks.loop(hours=1)
     async def check_dow_background(self) -> None:
         """Checks the day of the week and runs sunday() if it is Sunday."""
         await self.wait_until_ready()
         if not self._sunday_cooldown.is_set():
-            now = datetime.datetime.now(datetime.UTC)
+            now = datetime.datetime.now()
             if now.weekday() == 6:
                 day_seconds = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).seconds
                 self._sunday_cooldown.set()  # To prevent the gif from being sent multiple times a day
