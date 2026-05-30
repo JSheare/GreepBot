@@ -10,24 +10,25 @@ from numpy import random
 from typing import Dict
 
 import greepbot.config.parameters as params
-import greepbot.data.data_locs as data_locs
+import greepbot.resources.resource_locs as resource_locs
 from greepbot.helpers.helper_funcs import read_file, read_json, write_json, random_selector
 from greepbot.validation.config_validation import BotModel
 
 
 class GreepBot(discord.Client):
+    """A class that implements GreepBot."""
     def __init__(self, config: BotModel, **kwargs) -> None:
         super().__init__(**kwargs)
         self._config = config
         self._logger = logging.getLogger('discord')
 
-        self._songs = read_json(data_locs.SONGS_JSON)
+        self._songs = read_json(resource_locs.SONGS_JSON)
 
-        self._quotes = read_file(data_locs.QUOTES_TXT)
+        self._quotes = read_file(resource_locs.QUOTES_TXT)
         self._quote_num = 0  # Here to prevent repeat quotes being sent by 'greepbot' command
         self._quote_lock = asyncio.Lock()
 
-        self._gifs = read_file(data_locs.GIFS_TXT)
+        self._gifs = read_file(resource_locs.RANDOM_GIFS_TXT)
         self._gif_num = 0  # Here to prevent repeat gifs being sent by 'greepbot gif' command
         self._gif_lock = asyncio.Lock()
 
@@ -50,43 +51,64 @@ class GreepBot(discord.Client):
         """Writes Guild channel gif preferences to a file."""
         write_json(self._gif_preferences, f'{params.DATA_LOC}/gif_preferences.json')
 
-    # Discord client startup tasks
     async def on_ready(self) -> None:
         """Discord client startup tasks."""
         self._logger.info(f'{self.user} has connected to Discord.')
 
-    async def on_message(self, message: discord.Message) -> None:
-        """Processes messages for commands."""
-        # Ignores any messages from the bot itself
-        if message.author == self.user:
-            return
-        else:
-            # Sends a random Greep quote from the list
-            if message.content == 'greepbot':
-                await self.send_quote(message)
-            # Sends the number of days, hours, minutes, and seconds until Sunday
-            elif message.content == 'greepbot countdown':
-                await self.send_countdown(message)
+    @tasks.loop(hours=1)
+    async def check_dow_background(self) -> None:
+        """Checks the day of the week and runs sunday() if it is Sunday."""
+        await self.wait_until_ready()
+        if not self._sunday_cooldown.is_set():
+            now = datetime.datetime.now()
+            if now.weekday() == 6:
+                day_seconds = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).seconds
+                self._sunday_cooldown.set()  # To prevent the gif from being sent multiple times a day
+                while True:
+                    random_seconds = random.randint(0, high=86400)
+                    if day_seconds + random_seconds < 86400:
+                        break
 
-            # Sends a random Greep-related gif
-            elif message.content == 'greepbot gif':
-                await self.send_gif(message)
-            # IP request (dev use)
-            elif 'greepbot ip' in message.content:
-                await self.send_ip(message)
-            # Allows users to set a preferred channel for the Sunday gif
-            elif message.content == 'greepbot set gif channel':
-                await self.set_pref_gif_channel(message)
+                await asyncio.sleep(random_seconds)
+                await self.send_sunday_gif()
+                await asyncio.sleep(86400)
+                self._sunday_cooldown.clear()
 
-            # Sends BCNR easter egg
-            for term in ['black country, new road', 'bcnr', 'black country new road', 'black country']:
-                if term in message.content.lower():
-                    await self.send_bcnr(message)
-                    break
+    @tasks.loop()
+    async def custom_status_background(self) -> None:
+        """Runs the custom status background task."""
+        await self.wait_until_ready()
+        song_list = list(self._songs.keys())
+        song_index = random_selector(song_list)
+        await self.wait_until_ready()
+        await self.change_presence(activity=discord.Activity(name=song_list[song_index],
+                                                             type=discord.ActivityType.listening))
+        await asyncio.sleep(self._songs[song_list[song_index]])
 
-            # Rolls dice on voice channel easter egg
-            if 'greepbot' in message.content:
-                await self.roll_dice(message)
+    async def setup_hook(self) -> None:
+        self.check_dow_background.start()
+        self.custom_status_background.start()
+
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        """Removing a gif preference when we are removed from a Guild."""
+        del self._gif_preferences[str(guild.id)]
+        await asyncio.to_thread(self._write_gif_preferences)
+
+    async def send_sunday_gif(self) -> None:
+        """Sends the Sunday gif."""
+        await self.wait_until_ready()
+        channels = []
+        for server in self.guilds:
+            try:
+                channels.append(self.get_channel(self._gif_preferences[str(server.id)]))
+            except KeyError:
+                for channel in server.channels:
+                    if str(channel.type) == 'text':
+                        channels.append(channel)
+                        break
+
+        for channel in channels:
+            await channel.send(file=discord.File(f'{resource_locs.RESOURCE_LOC}/sunday.gif'))
 
     async def send_quote(self, message: discord.Message) -> None:
         """Sends a random Greep quote from the list."""
@@ -139,7 +161,7 @@ class GreepBot(discord.Client):
                     self._gif_num = gif_index
                     break
 
-            await message.channel.send(self._gifs[gif_index])
+            await message.channel.send(file=discord.File(f'{resource_locs.RESOURCE_LOC}/{self._gifs[gif_index]}'))
 
     async def send_ip(self, message: discord.Message) -> None:
         """Sends IP request message (dev use)."""
@@ -171,7 +193,7 @@ class GreepBot(discord.Client):
     @staticmethod
     async def send_bcnr(message: discord.Message) -> None:
         """Sends BCNR easter egg."""
-        await message.channel.send(file=discord.File(data_locs.BCNR_PNG))
+        await message.channel.send(file=discord.File(f'{resource_locs.RESOURCE_LOC}/bcnr.png'))
 
     async def roll_dice(self, message):
         """Rolls the dice and initiates the voice channel Easter egg."""
@@ -184,61 +206,46 @@ class GreepBot(discord.Client):
         """Plays the Greep scream in the user's voice channel."""
         if message.author.voice:
             voice_client = await message.author.voice.channel.connect()
-            voice_client.play(discord.FFmpegPCMAudio(data_locs.GREEP_SCREAM_MP3))
+            voice_client.play(discord.FFmpegPCMAudio(f'{resource_locs.RESOURCE_LOC}/greep_scream.mp3'))
             await asyncio.sleep(2.5)
             await voice_client.disconnect()
 
-    async def send_sunday_gif(self) -> None:
-        """Sends the Sunday gif."""
-        await self.wait_until_ready()
-        channels = []
-        for server in self.guilds:
-            try:
-                channels.append(self.get_channel(self._gif_preferences[str(server.id)]))
-            except KeyError:
-                for channel in server.channels:
-                    if str(channel.type) == 'text':
-                        channels.append(channel)
-                        break
+    async def on_message(self, message: discord.Message) -> None:
+        """Processes messages for commands."""
+        # Ignores any messages from the bot itself
+        if message.author == self.user:
+            return
+        else:
+            valid_command = False
 
-        for channel in channels:
-            await channel.send(file=discord.File(data_locs.SUNDAY_GIF))
+            # Sends a random Greep quote from the list
+            if message.content == 'greepbot':
+                valid_command = True
+                await self.send_quote(message)
+            # Sends the number of days, hours, minutes, and seconds until Sunday
+            elif message.content == 'greepbot countdown':
+                valid_command = True
+                await self.send_countdown(message)
+            # Sends a random Greep-related gif
+            elif message.content == 'greepbot gif':
+                valid_command = True
+                await self.send_gif(message)
+            # IP request (dev use)
+            elif 'greepbot ip' in message.content:
+                valid_command = True
+                await self.send_ip(message)
+            # Allows users to set a preferred channel for the Sunday gif
+            elif message.content == 'greepbot set gif channel':
+                valid_command = True
+                await self.set_pref_gif_channel(message)
 
-    @tasks.loop(hours=1)
-    async def check_dow_background(self) -> None:
-        """Checks the day of the week and runs sunday() if it is Sunday."""
-        await self.wait_until_ready()
-        if not self._sunday_cooldown.is_set():
-            now = datetime.datetime.now()
-            if now.weekday() == 6:
-                day_seconds = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).seconds
-                self._sunday_cooldown.set()  # To prevent the gif from being sent multiple times a day
-                while True:
-                    random_seconds = random.randint(0, high=86400)
-                    if day_seconds + random_seconds < 86400:
-                        break
+            # Sends BCNR easter egg
+            for term in ['black country, new road', 'bcnr', 'black country new road', 'black country']:
+                if term in message.content.lower():
+                    valid_command = True
+                    await self.send_bcnr(message)
+                    break
 
-                await asyncio.sleep(random_seconds)
-                await self.send_sunday_gif()
-                await asyncio.sleep(86400)
-                self._sunday_cooldown.clear()
-
-    @tasks.loop()
-    async def custom_status_background(self) -> None:
-        """Runs the custom status background task."""
-        await self.wait_until_ready()
-        song_list = list(self._songs.keys())
-        song_index = random_selector(song_list)
-        await self.wait_until_ready()
-        await self.change_presence(activity=discord.Activity(name=song_list[song_index],
-                                                             type=discord.ActivityType.listening))
-        await asyncio.sleep(self._songs[song_list[song_index]])
-
-    async def setup_hook(self) -> None:
-        self.check_dow_background.start()
-        self.custom_status_background.start()
-
-    async def on_guild_remove(self, guild: discord.Guild) -> None:
-        """Removing a gif preference when we are removed from a Guild."""
-        del self._gif_preferences[str(guild.id)]
-        await asyncio.to_thread(self._write_gif_preferences)
+            # Rolls dice on voice channel easter egg
+            if valid_command:
+                await self.roll_dice(message)
