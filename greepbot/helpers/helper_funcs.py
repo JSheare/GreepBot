@@ -8,7 +8,7 @@ from typing import Any, List
 def read_file(file_name: str) -> List[str]:
     """Returns the lines of the given file as a list of strings."""
     with open(file_name) as f:
-        lines = f.readlines()
+        lines = f.read().splitlines()
 
     return lines
 
