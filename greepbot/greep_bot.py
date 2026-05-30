@@ -108,7 +108,7 @@ class GreepBot(discord.Client):
                         break
 
         for channel in channels:
-            await channel.send(file=discord.File(f'{resource_locs.RESOURCE_LOC}/sunday.gif'))
+            await channel.send('https://tenor.com/view/schlagenheim-black-midi-greep-geordie-greep-bmbmbm-gif-22879771')
 
     async def send_quote(self, message: discord.Message) -> None:
         """Sends a random Greep quote from the list."""
@@ -161,7 +161,7 @@ class GreepBot(discord.Client):
                     self._gif_num = gif_index
                     break
 
-            await message.channel.send(file=discord.File(f'{resource_locs.RESOURCE_LOC}/{self._gifs[gif_index]}'))
+            await message.channel.send(self._gifs[gif_index])
 
     async def send_ip(self, message: discord.Message) -> None:
         """Sends IP request message (dev use)."""

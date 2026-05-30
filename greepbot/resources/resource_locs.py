@@ -1,4 +1,4 @@
-"""A module containing the locations of the various resource file indexes used by the bot."""
+"""A module containing the locations of the various resource files used by the bot."""
 import pathlib
 
 
